@@ -11,6 +11,14 @@
   </a>
 </p>
 
+---
+
+> [etherpush.io](https://etherpush.io) &nbsp;&middot;&nbsp;
+> GitHub [@etherpush](https://github.com/etherpush) &nbsp;&middot;&nbsp;
+> Twitter [@etherpush](https://twitter.com/etherpush)
+
+---
+
 # What
 
 It's the tests of EtherPush contracts.
