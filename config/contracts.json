@@ -1,0 +1,15 @@
+{
+  "default": {
+    "gas": "auto",
+    "contracts": {
+        "EtherPush": {
+            "gas": "3000000",
+            "args": [""]
+        },
+        "PushToken": {
+            "gas": "3000000",
+            "args": [""]
+        }
+    }
+  }
+}
