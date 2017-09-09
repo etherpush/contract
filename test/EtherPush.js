@@ -46,18 +46,35 @@ describe("EtherPush", function () {
       });
     });
 
-    it("fee shoule be 1% at default", (done) => {
-      EtherPush.getFee((err, rv) => {
+    it("sellerfee shoule be 0.5% at default", (done) => {
+      EtherPush.getSellerfee((err, rv) => {
+        console.log(err);
           if (err) return done(err);
-          assert.equal(rv, 10000);
+          assert.equal(rv, ether(0.005));
           done();
       });
     });
 
-    it("feeDivide should be 1000000 at default", (done) => {
-      EtherPush.feeDivide((err, rv) => {
+    it("buyerfee shoule be 0.5% at default", (done) => {
+      EtherPush.getBuyerfee((err, rv) => {
           if (err) return done(err);
-          assert.equal(rv, 1000000);
+          assert.equal(rv, ether(0.005));
+          done();
+      });
+    });
+
+    it("sellerfeeDivide should be 1000000 at default", (done) => {
+      EtherPush.sellerfeeDivide((err, rv) => {
+          if (err) return done(err);
+          assert.equal(rv, ether(1));
+          done();
+      });
+    });
+
+    it("buyerfeeDivide should be 1000000 at default", (done) => {
+      EtherPush.buyerfeeDivide((err, rv) => {
+          if (err) return done(err);
+          assert.equal(rv, ether(1));
           done();
       });
     });
@@ -73,29 +90,35 @@ describe("EtherPush", function () {
       EtherPush.ownerChangeOwner(accounts[1], (err, rv) => {
         if (err) return done();
         EtherPush.ownerChangeOwner(accounts[0], {from: accounts[1]}, (err, rv) => {
-          if (err) return done();
+          if (err) return done(err);
           return done();
         });
       });
     });
 
-    it("volume should be 0 at default", (done) => {
-      EtherPush.getVolume((err, rv) => {
-          if (err) return done(err);
-          assert.equal(rv, 0);
-          done();
-      });
-    });
-
     it("user can't change fee", (done) => {
-      EtherPush.ownerChangeFee(10000, {from: accounts[1]}, (err, rv) => {
+      EtherPush.ownerChangeSellerfee(ether(0.005), {from: accounts[1]}, (err, rv) => {
         if (err) return done();
         return done(new Error());
       });
     });
 
     it("owner can change fee", (done) => {
-      EtherPush.ownerChangeFee(10000, {from: accounts[0]}, (err, rv) => {
+      EtherPush.ownerChangeSellerfee(ether(0.005), {from: accounts[0]}, (err, rv) => {
+        if (err) return done(err);
+        return done();
+      });
+    });
+
+    it("user can't change fee", (done) => {
+      EtherPush.ownerChangeBuyerfee(ether(0.005), {from: accounts[1]}, (err, rv) => {
+        if (err) return done();
+        return done(new Error());
+      });
+    });
+
+    it("owner can change fee", (done) => {
+      EtherPush.ownerChangeBuyerfee(ether(0.005), {from: accounts[0]}, (err, rv) => {
         if (err) return done(err);
         return done();
       });
@@ -152,21 +175,43 @@ describe("EtherPush", function () {
       });
     });
 
-    it("Push token", (done) => {
-      /*
-       * before push token, we should approve token to EtherPush
-       */
+    it("accounts[0] depositToken", (done) => {
       PushToken.approve(EtherPush.address, 100*(1000000000000000000), (err, rv) => {
         if (err) return done(err);
-        /*
-         * Now let's push
-         */
-        EtherPush.push(PushToken.address, 100*(1000000000000000000), 1, 123456789, {
-          from: accounts[0],
-          gas: 200000,
-        }, (err, rv) => {
+        EtherPush.depositToken(PushToken.address, 100*(1000000000000000000), (err, rv) => {
           if (err) return done(err);
-          EtherPush.onPush((err, rv) => {
+          EtherPush.onDeposit((err, rv) => {
+            if (err) return done(err);
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+            assert.equal(token, PushToken.address);
+            assert.equal(user, accounts[0]);
+            assert.equal(amount, 100*(1000000000000000000));
+            assert.equal(balance, 100*(1000000000000000000));
+            done();
+          });
+        });
+      });
+    });
+
+    it("accounts[0] balance", (done) => {
+      EtherPush.balanceOf(PushToken.address, accounts[0], (err, rv) => {
+        assert.equal(rv, 100*(1000000000000000000));
+        return done();
+      });
+    });
+
+    it("accounts[0] withdarw token", (done) => {
+      EtherPush.withdrawAmountToken(PushToken.address, 10*(1000000000000000000), (err, rv) => {
+        if (err) return done(err);
+        EtherPush.onWithdraw((err, rv) => {
             if (err) return done(err);
 
             if (unique[rv.transactionHash] == true) {
@@ -176,24 +221,261 @@ describe("EtherPush", function () {
 
             const args = rv.args;
             const token = args.token;
+            const user = args.user;
             const amount = args.amount;
-            const price = args.price;
-            const id = args.id;
+            const balance = args.balance;
+
             assert.equal(token, PushToken.address);
-            assert.equal(amount, 100*(1000000000000000000));
-            assert.equal(price, 1);
-            assert.equal(id, 123456789);
-            return done();
-          })
+            assert.equal(user, accounts[0]);
+            assert.equal(amount, 10*(1000000000000000000));
+            assert.equal(balance, 90*(1000000000000000000));
+            done();
         });
       });
     });
 
-    it("Buy token", (done) => {
-      EtherPush.buy(PushToken.address, accounts[0], 123456789, {
+    it("accounts[0] withdarw all token", (done) => {
+      EtherPush.withdrawToken(PushToken.address, (err, rv) => {
+        if (err) return done(err);
+        EtherPush.onWithdraw((err, rv) => {
+            if (err) return done(err);
+
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+
+            assert.equal(token, PushToken.address);
+            assert.equal(user, accounts[0]);
+            assert.equal(amount, 90*(1000000000000000000));
+            assert.equal(balance, 0*(1000000000000000000));
+            done();
+        });
+      });
+    });
+
+    it("accounts[1] depositETH", (done) => {
+      EtherPush.depositETH({from: accounts[1], value:ether(10)}, (err, rv) => {
+          if (err) {return done(err);}
+          EtherPush.onDeposit((err, rv) => {
+            if (err) return done(err);
+
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+            assert.equal(token, 0);
+            assert.equal(user, accounts[1]);
+            assert.equal(amount, ether(10));
+            assert.equal(balance, ether(10));
+            done();
+          });
+      });
+    });
+
+    it("accounts[1] balance", (done) => {
+      EtherPush.balanceOf(0, accounts[1], (err, rv) => {
+        assert.equal(rv, ether(10));
+        return done();
+      });
+    });
+
+    it("accounts[1] withdarw token", (done) => {
+      EtherPush.withdrawAmountETH(ether(1), {from: accounts[1]}, (err, rv) => {
+        if (err) return done(err);
+        EtherPush.onWithdraw((err, rv) => {
+            if (err) return done(err);
+
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+
+            assert.equal(token, 0);
+            assert.equal(user, accounts[1]);
+            assert.equal(amount, ether(1));
+            assert.equal(balance, ether(9));
+            done();
+        });
+      });
+    });
+
+    it("accounts[0] withdarw all token", (done) => {
+      EtherPush.withdrawETH({from: accounts[1]}, (err, rv) => {
+        if (err) return done(err);
+        EtherPush.onWithdraw((err, rv) => {
+            if (err) return done(err);
+
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+
+            assert.equal(token, 0);
+            assert.equal(user, accounts[1]);
+            assert.equal(amount, ether(9));
+            assert.equal(balance, 0);
+            done();
+        });
+      });
+    });
+
+    it("accounts[0] depositToken", (done) => {
+      PushToken.approve(EtherPush.address, 100*(1000000000000000000), (err, rv) => {
+        if (err) return done(err);
+        EtherPush.depositToken(PushToken.address, 100*(1000000000000000000), (err, rv) => {
+          if (err) return done(err);
+          EtherPush.onDeposit((err, rv) => {
+            if (err) return done(err);
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+            assert.equal(token, PushToken.address);
+            assert.equal(user, accounts[0]);
+            assert.equal(amount, 100*(1000000000000000000));
+            assert.equal(balance, 100*(1000000000000000000));
+            done();
+          });
+        });
+      });
+    });
+
+    it("accounts[1] depositETH", (done) => {
+      EtherPush.depositETH({from: accounts[1], value:ether(10)}, (err, rv) => {
+          if (err) {return done(err);}
+          EtherPush.onDeposit((err, rv) => {
+            if (err) return done(err);
+
+            if (unique[rv.transactionHash] == true) {
+              return;
+            }
+            unique[rv.transactionHash] = true;
+            const args = rv.args;
+            const token = args.token;
+            const user = args.user;
+            const amount = args.amount;
+            const balance = args.balance;
+            assert.equal(token, 0);
+            assert.equal(user, accounts[1]);
+            assert.equal(amount, ether(10));
+            assert.equal(balance, ether(10));
+            done();
+          });
+      });
+    });
+
+    it("accounts[0] balance", (done) => {
+      EtherPush.balanceOf(PushToken.address, accounts[0], (err, rv) => {
+        assert.equal(rv, 100*(1000000000000000000));
+        return done();
+      });
+    });
+
+    it("accounts[1] balance", (done) => {
+      EtherPush.balanceOf(0, accounts[1], (err, rv) => {
+        assert.equal(rv, ether(10));
+        return done();
+      });
+    });
+
+    it("change owner to accounts[2]", (done) => {
+      EtherPush.ownerChangeOwner(accounts[2], (err, rv) => {
+        if (err) return done();
+        done();
+      });
+    });
+
+    it("accounts[0] to sell token", (done) => {
+      // (address sell, uint sellamount, address buy, uint buyamount, uint id, address buyer)
+      EtherPush.tosell(PushToken.address, 10*(1000000000000000000), 0, ether(10), 123456789, 0,
+      {
+        from: accounts[0],
+        gas: 100000,
+      }, (err, rv) => {
+        if (err) return done(err);
+
+        EtherPush.onSell((err, rv) => {
+          if (err) return done(err);
+
+          if (unique[rv.transactionHash] == true) {
+            return;
+          }
+          unique[rv.transactionHash] = true;
+
+          const args = rv.args;
+          const sell = args.sell;
+          const sellamount = args.sellamount;
+          const buy = args.buy;
+          const buyamount = args.buyamount;
+          const id = args.id;
+          const seller = args.seller;
+          const buyer = args.buyer;
+
+          assert.equal(sell, PushToken.address);
+          assert.equal(sellamount, 10*(1000000000000000000));
+          assert.equal(buy, 0);
+          assert.equal(buyamount, ether(10));
+          assert.equal(buyer, 0);
+          assert.equal(seller, accounts[0]);
+          assert.equal(id, 123456789);
+          done();
+        });
+      });
+    });
+
+    it("check order", (done) => {
+      EtherPush.getOrder(123456789, accounts[0], (err, rv) => {
+        if (err) return done(err);
+
+        const sell = rv[0];
+        const sellamount = rv[1];
+        const buy = rv[2];
+        const buyamount = rv[3];
+        const buyer = rv[4];
+
+        assert.equal(sell, PushToken.address);
+        assert.equal(sellamount, 10*(1000000000000000000));
+        assert.equal(buy, 0);
+        assert.equal(buyamount, ether(10));
+        assert.equal(buyer, 0);
+
+        done();
+      });
+    });
+
+    it("accounts[1] to buy 5 token", (done) => {
+      EtherPush.tobuy(123456789, accounts[0], ether(5), {
         from: accounts[1],
-        value: ether(10),
-        gas: 200000
+        gas: 150000,
       }, (err, rv) => {
         if (err) return done(err);
         EtherPush.onBuy((err, rv) => {
@@ -205,429 +487,167 @@ describe("EtherPush", function () {
           unique[rv.transactionHash] = true;
 
           const args = rv.args;
+          const sell = args.sell;
+          const sellamount = args.sellamount;
+          const buy = args.buy;
+          const buyamount = args.buyamount;
+          const id = args.id;
           const seller = args.seller;
           const buyer = args.buyer;
-          const amount = args.amount;
-          const price = args.price;
-
+          assert.equal(sell, PushToken.address);
+          assert.equal(sellamount, 5*(1000000000000000000));
+          assert.equal(buy, 0);
+          assert.equal(buyamount, ether(5));
+          assert.equal(id, 123456789);
           assert.equal(seller, accounts[0]);
           assert.equal(buyer, accounts[1]);
-          assert.equal(amount, 9.9 * (1000000000000000000));
-          assert.equal(price, 1);
 
-          return done();
+          done();
         });
       });
     });
 
-    it("check push remaing", (done) => {
-      EtherPush.amountAndPriceOf(PushToken.address, accounts[0], 123456789, (err, rv) => {
-        if (err) return done(err);
-        const amount = rv[0];
-        const price = rv[1];
-
-        assert.equal(amount, (100-9.9)*(1000000000000000000));
-        assert.equal(price, 1);
-
-        return done();
-      });
-    });
-
-    it("cancel remaing push", (done) => {
-      EtherPush.cancel(PushToken.address, 123456789, (err, rv) => {
-        if (err) return done(err);
-        EtherPush.amountAndPriceOf(PushToken.address, accounts[0], 123456789, (err, rv) => {
-          if (err) return done(err);
-          const amount = rv[0];
-          const price = rv[1];
-
-          assert.equal(amount, 0);
-          assert.equal(price, 1);
-
-          return done();
-        });
-      });
-    });
-
-    it("check accounts[0] token", (done) => {
+    it("accounts[0] token balance", (done) => {
       EtherPush.balanceOf(PushToken.address, accounts[0], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, (100-9.9)*(1000000000000000000));
+        assert.equal(rv, 95*(1000000000000000000));
         return done();
       });
     });
 
-    it("check accounts[0] ETH balance", (done) => {
+    it("accounts[1] token balance", (done) => {
+      EtherPush.balanceOf(PushToken.address, accounts[1], (err, rv) => {
+        assert.equal(rv, 4.975*(1000000000000000000));
+        return done();
+      });
+    });
+
+    it("accounts[2] token balance", (done) => {
+      EtherPush.balanceOf(PushToken.address, accounts[2], (err, rv) => {
+        assert.equal(rv, 0.025*(1000000000000000000));
+        return done();
+      });
+    });
+
+    it("accounts[0] ETH balance", (done) => {
       EtherPush.balanceOf(0, accounts[0], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, ether(9.9));
+        assert.equal(rv, ether(4.975));
         return done();
       });
     });
 
-    it("check accounts[1] token", (done) => {
-      EtherPush.balanceOf(PushToken.address, accounts[1], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 9.9*(1000000000000000000));
-        return done();
-      });
-    });
-
-    it("volume should be right", (done) => {
-      EtherPush.getVolume((err, rv) => {
-        if (err) return done(err);
-        assert.equal(rv, ether(10));
-        return done();
-      });
-    });
-
-    it("accounts[0] withdraw amount 4 ETH", (done) => {
-        EtherPush.withdrawAmountETH(ether(4), {
-          from:accounts[0]
-        },
-          (err, rv) => {
-            if (err) return done(err);
-            EtherPush.onWithdraw((err, rv) => {
-              if (err) return done(err);
-
-              if (unique[rv.transactionHash] == true) {
-                return;
-              }
-              unique[rv.transactionHash] = true;
-
-              const args = rv.args;
-              const token = args.token;
-              const user = args.user;
-              const amount = args.amount;
-              const balance = args.balance;
-
-              assert.equal(token, 0);
-              assert.equal(user, accounts[0]);
-              assert.equal(amount, ether(4));
-              assert.equal(balance, ether(5.9));
-
-              return done();
-            });
-        });
-    });
-
-    it("accounts[0] withdraw amount all ETH", (done) => {
-        EtherPush.withdrawETH({
-          from:accounts[0]
-        },
-          (err, rv) => {
-            if (err) return done(err);
-            EtherPush.onWithdraw((err, rv) => {
-              if (err) return done(err);
-
-              if (unique[rv.transactionHash] == true) {
-                return;
-              }
-              unique[rv.transactionHash] = true;
-
-              const args = rv.args;
-              const token = args.token;
-              const user = args.user;
-              const amount = args.amount;
-              const balance = args.balance;
-
-              assert.equal(token, 0);
-              assert.equal(user, accounts[0]);
-              assert.equal(amount, ether(5.9));
-              assert.equal(balance, ether(0));
-
-              return done();
-            });
-        });
-    });
-
-    it("accounts[0] withdraw amount 4 token", (done) => {
-      EtherPush.withdrawAmountToken(PushToken.address, 4*(1000000000000000000), {
-        from: accounts[0],
-      },(err, rv) => {
-        if (err) return done(err);
-
-        EtherPush.onWithdraw((err, rv) => {
-          if (err) {
-            return done(err);
-          }
-
-          if (unique[rv.transactionHash] == true) {
-            return;
-          }
-          unique[rv.transactionHash] = true;
-
-          const args = rv.args;
-          const token = args.token;
-          const user = args.user;
-          const amount = args.amount;
-          const balance = args.balance;
-
-          assert.equal(token, PushToken.address);
-          assert.equal(user, accounts[0]);
-          assert.equal(amount, (4)* 1000000000000000000);
-          assert.equal(balance,(86.1) * 1000000000000000000);
-
-          return done();
-        });
-      });
-    });
-
-    it("accounts[0] withdraw all token", (done) => {
-      EtherPush.withdrawToken(PushToken.address, {
-        from: accounts[0],
-      },(err, rv) => {
-        if (err) return done(err);
-
-        EtherPush.onWithdraw((err, rv) => {
-          if (err) {
-            return done(err);
-          }
-
-          if (unique[rv.transactionHash] == true) {
-            return;
-          }
-          unique[rv.transactionHash] = true;
-
-          const args = rv.args;
-          const token = args.token;
-          const user = args.user;
-          const amount = args.amount;
-          const balance = args.balance;
-
-          assert.equal(token, PushToken.address);
-          assert.equal(user, accounts[0]);
-          assert.equal(amount, (86.1)* 1000000000000000000);
-          assert.equal(balance, 0);
-
-          return done();
-        });
-      });
-    });
-
-    it("accounts[1] withdraw amount 4 token", (done) => {
-      EtherPush.withdrawAmountToken(PushToken.address, 4*(1000000000000000000), {
-        from: accounts[1],
-      },(err, rv) => {
-        if (err) return done(err);
-
-        EtherPush.onWithdraw((err, rv) => {
-          if (err) {
-            return done(err);
-          }
-
-          if (unique[rv.transactionHash] == true) {
-            return;
-          }
-          unique[rv.transactionHash] = true;
-
-          const args = rv.args;
-          const token = args.token;
-          const user = args.user;
-          const amount = args.amount;
-          const balance = args.balance;
-
-          assert.equal(token, PushToken.address);
-          assert.equal(user, accounts[1]);
-          assert.equal(amount, (4)* 1000000000000000000);
-          assert.equal(balance,(5.9) * 1000000000000000000);
-
-          return done();
-        });
-      });
-    });
-
-    it("accounts[1] withdraw all token", (done) => {
-      EtherPush.withdrawToken(PushToken.address, {
-        from: accounts[1],
-      },(err, rv) => {
-        if (err) return done(err);
-
-        EtherPush.onWithdraw((err, rv) => {
-          if (err) {
-            return done(err);
-          }
-
-          if (unique[rv.transactionHash] == true) {
-            return;
-          }
-          unique[rv.transactionHash] = true;
-
-          const args = rv.args;
-          const token = args.token;
-          const user = args.user;
-          const amount = args.amount;
-          const balance = args.balance;
-
-          assert.equal(token, PushToken.address);
-          assert.equal(user, accounts[1]);
-          assert.equal(amount, (5.9)* 1000000000000000000);
-          assert.equal(balance, 0);
-
-          return done();
-        });
-      });
-    });
-
-    it("check etherpush balance", (done) => {
-      web3.eth.getBalance(EtherPush.address, (err, rv) => {
-        if (err) return done(err);
-        assert.equal(rv, ether(0.1));
-        return done();
-      });
-    });
-
-    it("owner withdraw etherpush to another account", (done) => {
-      web3.eth.getBalance(accounts[2], (err, rv) => {
-        if (err) return done(err);
-        const balance2 = rv;
-        EtherPush.ownerWithdrawAccount(accounts[2], {
-          from: accounts[0],
-        }, (err, rv) => {
-          if (err) return done(err);
-          web3.eth.getBalance(accounts[2], (err, rv) => {
-            if (err) return done(err);
-            assert(rv.equals(balance2.add(ether(0.1))));
-            return done();
-          });
-        });
-      });
-    });
-
-    it("check etherpush balance", (done) => {
-      web3.eth.getBalance(EtherPush.address, (err, rv) => {
-        if (err) return done(err);
-        assert.equal(rv, ether(0));
-        return done();
-      });
-    });
-
-    it("check accounts[1] token", (done) => {
-      EtherPush.balanceOf(PushToken.address, accounts[1], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 0);
-        return done();
-      });
-    });
-
-    it("check accounts[0] token", (done) => {
-      EtherPush.balanceOf(PushToken.address, accounts[0], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 0);
-        return done();
-      });
-    });
-
-    it("check accounts[0] ETH balance", (done) => {
-      EtherPush.balanceOf(0, accounts[0], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 0);
-        return done();
-      });
-    });
-
-    it("check accounts[1] token", (done) => {
-      EtherPush.balanceOf(PushToken.address, accounts[1], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 0);
-        return done();
-      });
-    });
-
-    it("check accounts[1] ETH balance", (done) => {
+    it("accounts[1] ETH balance", (done) => {
       EtherPush.balanceOf(0, accounts[1], (err, rv) => {
-        if (err) return done(err);
-
-        assert.equal(rv, 0);
+        assert.equal(rv, ether(5));
         return done();
       });
     });
 
-    it("owner change running to false", (done) => {
-      EtherPush.ownerChangeRunning(false, {from:accounts[0]}, (err, rv) => {
-        if (err) return done();
+    it("accounts[2] ETH balance", (done) => {
+      EtherPush.balanceOf(0, accounts[2], (err, rv) => {
+        assert.equal(rv, ether(0.025));
         return done();
       });
     });
 
-    it("Cannot Push token when it's not running", (done) => {
-      /*
-       * before push token, we should approve token to EtherPush
-       */
-      PushToken.approve(EtherPush.address, 100*(1000000000000000000), (err, rv) => {
+    it("check order", (done) => {
+      EtherPush.getOrder(123456789, accounts[0], (err, rv) => {
         if (err) return done(err);
-        /*
-         * Now let's push
-         */
-        EtherPush.push(PushToken.address, 100*(1000000000000000000), 1, 123456789, {
-          from: accounts[0],
-          gas: 200000,
-        }, (err, rv) => {
-          if (err) return done();
-          return done();
-        });
+
+        const sell = rv[0];
+        const sellamount = rv[1];
+        const buy = rv[2];
+        const buyamount = rv[3];
+        const buyer = rv[4];
+
+        assert.equal(sell, PushToken.address);
+        assert.equal(sellamount, 5*(1000000000000000000));
+        assert.equal(buy, 0);
+        assert.equal(buyamount, ether(5));
+        assert.equal(buyer, 0);
+
+        done();
       });
     });
 
-    it("owner change running to true", (done) => {
-      EtherPush.ownerChangeRunning(true, {from:accounts[0]}, (err, rv) => {
-        if (err) return done();
-        return done();
-      });
-    });
-
-    it("Push token Again", (done) => {
-      /*
-       * before push token, we should approve token to EtherPush
-       */
-      PushToken.approve(EtherPush.address, 10*(1000000000000000000), (err, rv) => {
-        if (err) return done(err);
-        /*
-         * Now let's push
-         */
-        EtherPush.push(PushToken.address, 10*(1000000000000000000), 1, 23456789, {
-          from: accounts[0],
-          gas: 200000,
-        }, (err, rv) => {
-          if (err) return done(err);
-          EtherPush.onPush((err, rv) => {
-            if (err) return done(err);
-
-            if (unique[rv.transactionHash] == true) {
-              return;
-            }
-            unique[rv.transactionHash] = true;
-
-            const args = rv.args;
-            const token = args.token;
-            const amount = args.amount;
-            const price = args.price;
-            const id = args.id;
-            assert.equal(token, PushToken.address);
-            assert.equal(amount, 10*(1000000000000000000));
-            assert.equal(price, 1);
-            assert.equal(id, 23456789);
-            return done();
-          })
-        });
-      });
-    });
-
-    it("Buy excessive token", (done) => {
-      EtherPush.buy(PushToken.address, accounts[0], 23456789, {
+    it("try buy more token", (done) => {
+      EtherPush.tobuy(123456789, accounts[0], ether(10), {
         from: accounts[1],
-        value: ether(20),
-        gas: 200000
+        gas: 150000,
       }, (err, rv) => {
         if (err) return done();
         return done(new Error());
+      });
+    });
+
+    it("accounts[1] to buy 1 token", (done) => {
+      EtherPush.tobuy(123456789, accounts[0], ether(1), {
+        from: accounts[1],
+        gas: 150000,
+      }, (err, rv) => {
+        if (err) return done(err);
+        EtherPush.onBuy((err, rv) => {
+          if (err) return done(err);
+
+          if (unique[rv.transactionHash] == true) {
+            return;
+          }
+          unique[rv.transactionHash] = true;
+
+          const args = rv.args;
+          const sell = args.sell;
+          const sellamount = args.sellamount;
+          const buy = args.buy;
+          const buyamount = args.buyamount;
+          const id = args.id;
+          const seller = args.seller;
+          const buyer = args.buyer;
+          assert.equal(sell, PushToken.address);
+          assert.equal(sellamount, 1*(1000000000000000000));
+          assert.equal(buy, 0);
+          assert.equal(buyamount, ether(1));
+          assert.equal(id, 123456789);
+          assert.equal(seller, accounts[0]);
+          assert.equal(buyer, accounts[1]);
+
+          done();
+        });
+      });
+    });
+
+    it("check order again", (done) => {
+      EtherPush.getOrder(123456789, accounts[0], (err, rv) => {
+        if (err) return done(err);
+
+        const sell = rv[0];
+        const sellamount = rv[1];
+        const buy = rv[2];
+        const buyamount = rv[3];
+        const buyer = rv[4];
+
+        assert.equal(sell, PushToken.address);
+        assert.equal(sellamount, 4*(1000000000000000000));
+        assert.equal(buy, 0);
+        assert.equal(buyamount, ether(4));
+        assert.equal(buyer, 0);
+
+        done();
+      });
+    });
+
+    it("cancel the order", (done) => {
+      EtherPush.tocancel(123456789, (err, rv) => {
+        if (err) return done(err);
+        done();
+      });
+    });
+
+    it("accounts[1] to buy 1 token", (done) => {
+      EtherPush.tobuy(123456789, accounts[0], ether(1), {
+        from: accounts[1],
+        gas: 150000,
+      }, (err, rv) => {
+        if (err) return done();
+        done(new Error());
       });
     });
 });
